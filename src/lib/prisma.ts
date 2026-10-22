@@ -6,15 +6,30 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+function isPostgresSchema(): boolean {
+  try {
+    const schemaPath = path.resolve(process.cwd(), 'prisma', 'schema.prisma');
+    if (fs.existsSync(schemaPath)) {
+      const content = fs.readFileSync(schemaPath, 'utf8');
+      return content.includes('provider = "postgresql"');
+    }
+  } catch {}
+  return false;
+}
+
 function resolveDatabaseUrl(): string {
   const envUrl = process.env.DATABASE_URL;
 
-  // 1. If an external database (PostgreSQL / MySQL) is configured, use it directly
-  if (envUrl && !envUrl.startsWith('file:')) {
-    return envUrl;
+  // Case 1: Schema is configured for PostgreSQL
+  if (isPostgresSchema()) {
+    if (envUrl && (envUrl.startsWith('postgresql://') || envUrl.startsWith('postgres://'))) {
+      return envUrl;
+    }
+    return envUrl || '';
   }
 
-  // 2. If running on Vercel serverless / AWS Lambda (read-only filesystem)
+  // Case 2: Schema is SQLite (default). The URL MUST start with "file:".
+  // On Vercel / AWS Lambda (read-only filesystem), copy seed dev.db to /tmp/dev.db
   if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
     const tmpDbPath = path.join('/tmp', 'dev.db');
     if (!fs.existsSync(tmpDbPath)) {
@@ -28,6 +43,7 @@ function resolveDatabaseUrl(): string {
       if (source) {
         try {
           fs.copyFileSync(source, tmpDbPath);
+          console.log('[TrustVault] Copied seed database to /tmp/dev.db');
         } catch (e) {
           console.error('[TrustVault] Failed to copy seed database to /tmp:', e);
         }
@@ -36,22 +52,30 @@ function resolveDatabaseUrl(): string {
     return `file:${tmpDbPath}`;
   }
 
-  // 3. Local development environment: resolve absolute path to dev.db
-  const candidates = [
-    path.resolve(process.cwd(), 'prisma', 'dev.db'),
-    path.resolve(process.cwd(), 'dev.db'),
-  ];
-  const existing = candidates.find((c) => fs.existsSync(c));
-  if (existing) {
-    return `file:${existing}`;
+  // Case 3: Local development with SQLite
+  // In Prisma, schema.prisma resolves "file:./dev.db" relative to the "prisma" directory.
+  const prismaDbPath = path.resolve(process.cwd(), 'prisma', 'dev.db');
+  if (fs.existsSync(prismaDbPath)) {
+    return `file:${prismaDbPath}`;
   }
 
-  return envUrl || `file:${path.resolve(process.cwd(), 'prisma', 'dev.db')}`;
+  const rootDbPath = path.resolve(process.cwd(), 'dev.db');
+  if (fs.existsSync(rootDbPath)) {
+    return `file:${rootDbPath}`;
+  }
+
+  return `file:${prismaDbPath}`;
 }
 
 function getPrismaClient(): PrismaClient {
   if (!globalForPrisma.prisma) {
     const dbUrl = resolveDatabaseUrl();
+
+    // CRITICAL: Overwrite process.env.DATABASE_URL before creating PrismaClient
+    // so Prisma's schema validator (evaluating `url = env("DATABASE_URL")`)
+    // matches the required protocol (e.g. `file:` for SQLite).
+    process.env.DATABASE_URL = dbUrl;
+
     globalForPrisma.prisma = new PrismaClient({
       datasources: {
         db: {
