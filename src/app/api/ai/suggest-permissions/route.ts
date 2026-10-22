@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser, SecurityException } from '@/lib/auth';
 import { suggestDocumentAccess, confirmAiSuggestion } from '@/lib/ai';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || '127.0.0.1';
 
   try {
-    const user = await getSessionUser();
+    const user = await getSessionUser(req);
     if (!user) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
     }
@@ -41,7 +43,7 @@ export async function PUT(req: NextRequest) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || '127.0.0.1';
 
   try {
-    const user = await getSessionUser();
+    const user = await getSessionUser(req);
     if (!user) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
     }

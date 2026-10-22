@@ -3,6 +3,8 @@ import { getSessionUser, SecurityException } from '@/lib/auth';
 import { verifyDocumentAccess } from '@/lib/guards';
 import { createAuditLogEntry } from '@/lib/audit';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }

@@ -7,11 +7,13 @@ import { validateFileMagicBytes } from '@/lib/crypto';
 import { getStorageDriver } from '@/lib/storage';
 import { createAuditLogEntry } from '@/lib/audit';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || '127.0.0.1';
 
   try {
-    const user = await getSessionUser();
+    const user = await getSessionUser(req);
     if (!user) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
     }

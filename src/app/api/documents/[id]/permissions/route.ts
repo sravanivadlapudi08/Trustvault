@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { getSessionUser, SessionUser } from '@/lib/auth';
 import { createAuditLogEntry } from '@/lib/audit';
 
+export const dynamic = 'force-dynamic';
+
 interface AuthCheckSuccess {
   authorized: true;
   isOwner: boolean;
