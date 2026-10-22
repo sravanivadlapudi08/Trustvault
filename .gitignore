@@ -8,5 +8,4 @@ dist/
 .next/
 coverage/
 *.log
-
 vault_storage/
