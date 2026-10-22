@@ -1,0 +1,86 @@
+// TrustVault Prisma Schema
+// Standard schema supporting zero-config local testing and development
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String               @id @default(uuid())
+  email        String               @unique
+  name         String
+  passwordHash String
+  role         String               // "admin" | "owner" | "viewer"
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  documents    Document[]           @relation("UserDocuments")
+  permissions  DocumentPermission[] @relation("UserPermissions")
+
+  @@index([role])
+  @@index([email])
+}
+
+model Document {
+  id          String               @id @default(uuid())
+  title       String
+  filePath    String               // Private bucket object key or secure vault path
+  fileSize    Int                  @default(0)
+  mimeType    String               @default("application/octet-stream")
+  category    String               @default("General")
+  ownerId     String
+  owner       User                 @relation("UserDocuments", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  permissions DocumentPermission[]
+
+  @@index([ownerId])
+  @@index([category])
+  @@index([title])
+}
+
+model DocumentPermission {
+  id          String    @id @default(uuid())
+  documentId  String
+  userId      String
+  canRead     Boolean   @default(true)
+  canDownload Boolean   @default(true)
+  canEdit     Boolean   @default(false)
+  canShare    Boolean   @default(false) // Delegation: allows authorized Admins to manage Viewers
+  grantedBy   String?
+  revokedAt   DateTime? // Revocation timestamp for immediate invalidation
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user        User      @relation("UserPermissions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@index([documentId])
+  @@index([userId])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorId      String   // User ID or "ANONYMOUS" for unauthenticated attempts
+  action       String   // e.g., "DOCUMENT_UPLOAD", "DOCUMENT_DOWNLOAD", "UNAUTHORIZED_ACCESS_BLOCKED", "PERMISSION_GRANT", etc.
+  targetId     String   // Target document, user, or resource ID
+  ipAddress    String   @default("127.0.0.1")
+  status       String   // "SUCCESS" | "BLOCKED" | "FAILURE"
+  metadata     String?  // JSON string containing contextual audit details
+  previousHash String   // Cryptographic SHA-256 hash of the immediately preceding record
+  currentHash  String   // SHA-256(id + actorId + action + targetId + ipAddress + status + timestamp + previousHash)
+  timestamp    DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetId])
+  @@index([action])
+  @@index([status])
+  @@index([timestamp])
+}

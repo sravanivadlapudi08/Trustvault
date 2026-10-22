@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+.nuxt/
+.output/
+.next/
+coverage/
+*.log
+
+vault_storage/

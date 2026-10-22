@@ -1,0 +1,90 @@
+// TrustVault Prisma Schema - Production PostgreSQL Target
+// Includes full support for PostgreSQL types, UUID generation, and Row-Level Security (RLS)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String               @id @default(uuid()) @db.Uuid
+  email        String               @unique
+  name         String
+  passwordHash String
+  role         String               // "admin" | "owner" | "viewer"
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  documents    Document[]           @relation("UserDocuments")
+  permissions  DocumentPermission[] @relation("UserPermissions")
+
+  @@index([role])
+  @@index([email])
+  @@map("users")
+}
+
+model Document {
+  id          String               @id @default(uuid()) @db.Uuid
+  title       String
+  filePath    String               // Private bucket object key or secure vault path
+  fileSize    Int                  @default(0)
+  mimeType    String               @default("application/octet-stream")
+  category    String               @default("General")
+  ownerId     String               @db.Uuid
+  owner       User                 @relation("UserDocuments", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  permissions DocumentPermission[]
+
+  @@index([ownerId])
+  @@index([category])
+  @@index([title])
+  @@map("documents")
+}
+
+model DocumentPermission {
+  id          String    @id @default(uuid()) @db.Uuid
+  documentId  String    @db.Uuid
+  userId      String    @db.Uuid
+  canRead     Boolean   @default(true)
+  canDownload Boolean   @default(true)
+  canEdit     Boolean   @default(false)
+  canShare    Boolean   @default(false) // Delegation: allows authorized Admins to manage Viewers
+  grantedBy   String?   @db.Uuid
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user        User      @relation("UserPermissions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@index([documentId])
+  @@index([userId])
+  @@map("document_permissions")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorId      String   // User UUID or 'ANONYMOUS'
+  action       String
+  targetId     String   // Target UUID
+  ipAddress    String   @default("127.0.0.1")
+  status       String   // "SUCCESS" | "BLOCKED" | "FAILURE"
+  metadata     String?  // JSON string
+  previousHash String   // Cryptographic SHA-256
+  currentHash  String   // Cryptographic SHA-256
+  timestamp    DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetId])
+  @@index([action])
+  @@index([status])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
